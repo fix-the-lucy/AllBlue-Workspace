@@ -1,0 +1,135 @@
+version: "3.8"
+
+services:
+
+  # ---------------------------------------------------------
+  # Ubuntu container - general dev environment
+  # (Python, Java, C, C++, accessible via code-server + VNC)
+  # ---------------------------------------------------------
+  ubuntu-dev:
+    build:
+      context: ./ubuntu-dev
+    container_name: allblue-ubuntu                                                                       restart: unless-stopped                                                                              environment:
+      - VNC_PASSWORD=${UBUNTU_VNC_PASSWORD}
+    volumes:
+      - ubuntu_data:/root/workspace
+    networks:
+      - allblue-net
+
+  # ---------------------------------------------------------
+  # code-server - browser-based VS Code (attached to Ubuntu box)
+  # ---------------------------------------------------------
+  code-server:
+    image: codercom/code-server:latest
+    container_name: allblue-codeserver
+    restart: unless-stopped
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+    volumes:
+      - ubuntu_data:/home/coder/project
+    networks:
+      - allblue-net
+  # ---------------------------------------------------------
+  # Kali container - security tools
+  # (Metasploit, nmap, Burp Suite, etc, accessible via VNC)
+  # ---------------------------------------------------------
+  kali-lab:
+    build:
+      context: ./kali-lab
+    container_name: allblue-kali
+    restart: unless-stopped
+    environment:
+      - VNC_PASSWORD=${KALI_VNC_PASSWORD}
+    volumes:
+      - kali_data:/root/workspace
+    networks:
+      - allblue-net
+    # Uncomment if you need raw network access for nmap/metasploit scans
+    # cap_add:
+    #   - NET_ADMIN
+    #   - NET_RAW
+
+  # ---------------------------------------------------------
+  # Guacamole - clientless remote desktop gateway (browser access)
+  # ---------------------------------------------------------
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: allblue-guacd
+    restart: unless-stopped
+    networks:
+      - allblue-net
+
+  guac-db:
+    image: mysql:8.0
+    container_name: allblue-guac-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=guacamole_db
+      - MYSQL_USER=guacamole_user
+      - MYSQL_PASSWORD=${GUAC_DB_PASSWORD}
+    volumes:
+      - guac_db_data:/var/lib/mysql
+      - ./guac-init:/docker-entrypoint-initdb.d
+    networks:
+      - allblue-net
+
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: allblue-guacamole
+    restart: unless-stopped
+    environment:
+      - GUACD_HOSTNAME=guacd
+      - MYSQL_HOSTNAME=guac-db
+      - MYSQL_DATABASE=guacamole_db
+      - MYSQL_USER=guacamole_user
+      - MYSQL_PASSWORD=${GUAC_DB_PASSWORD}
+    depends_on:
+      - guacd
+      - guac-db
+    networks:
+      - allblue-net
+
+  # ---------------------------------------------------------
+  # Nginx - single entry point, HTTPS, reverse proxy
+  # ---------------------------------------------------------
+  nginx:
+    image: nginx:latest
+    container_name: allblue-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      - guacamole
+      - code-server
+    networks:
+      - allblue-net
+
+  # ---------------------------------------------------------
+  # Cloudflare Tunnel - exposes AllBlue to the internet
+  # WITHOUT opening any ports on your router/firewall
+  # ---------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: allblue-cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    networks:
+      - allblue-net
+
+networks:
+  allblue-net:
+    driver: bridge
+
+volumes:
+  ubuntu_data:
+  kali_data:
+  guac_db_data:
