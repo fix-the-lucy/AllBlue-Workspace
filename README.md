@@ -42,13 +42,13 @@ AllBlue packages a full security research environment (Kali Linux, Metasploit, n
 ## Quick Start
 
 ```bash
-git clone https://github.com/<your-username>/allblue.git
+git clone https://github.com/fix-the-lucy/AllBlue-Workspace.git
 cd allblue
 cp .env.example .env   # edit with your own secrets
 docker-compose up -d
 ```
 
-Then open `https://<your-server-ip-or-domain>` in any browser.
+Then open `Cloudflared Link >` in any browser.
 
 ## Requirements
 
